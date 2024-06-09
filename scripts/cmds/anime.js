@@ -1,68 +1,95 @@
-const { createReadStream, unlinkSync } = require("fs-extra");
-const { resolve } = require("path");
-const axios = require('axios');
+const axios = require("axios");
+const fs = require("fs-extra");
 
 module.exports = {
-	config: {
-		name: "anime",
-		aliases: [],
-		version: "1.0",
-		author: "kivv",
-		countDown: 5,
-		role: 2,
-		shortDescription: "18+",
-		longDescription: "",
-		category: "anime🌸",
-		guide: "{pn}"
-	},
-	onLoad: async function () {
-		const { resolve } = require("path");
-		const { existsSync, readFileSync } = require("fs-extra");
-		const { downloadFile } = global.utils;
-		const path = resolve(__dirname, 'cache', 'alime.json');
-		const url = "https://raw.githubusercontent.com/ProCoderMew/Module-Miraiv2/Mew/data/alime.json";
 
-		try {
-			if (!existsSync(path)) await downloadFile(url, path);
-			const data = JSON.parse(readFileSync(path));
-			if (data.length == 0) await downloadFile(url, path);
-			return;
-		} catch {
-			await downloadFile(url, path);
-		}
-	},
-	onStart: async function ({ event, api, args }) {
-		const { threadID, senderID, messageID } = event;
+  config: {
+    name: 'anime',
+    version: '1.0',
+    author: 'Kshitiz',
+    countDown: 20,
+    role: 0,
+    shortDescription: 'Anime recommendations by genre',
+    longDescription: '',
+    category: 'media',
+    guide: {
+      en: '{p}anime {genre}:- shonen | seinen | isekai',
+    }
+  },
 
-		const out = (msg, callback = function () {}) => api.sendMessage(msg, threadID, callback, messageID);
-		const { sfw, nsfw } = require("./cache/alime.json");
-		var apiUrl;
+  onStart: async function ({ api, event, message }) {
+    const messageBody = event.body.toLowerCase().trim();
+    if (messageBody === 'anime') {
+      await message.reply('Please specify genre.\n{p}anime {genre}:- shonen | seinen | isekai');
+      return;
+    }
 
-		if (!sfw.hasOwnProperty(args[0]) && !nsfw.hasOwnProperty(args[0])) {
-			var nsfwData = Object.keys(nsfw).join(", ");
-			var sfwData = Object.keys(sfw).join(", ");
-			return out("=== Sfw Tag ===\n" + sfwData + "\n\n=== Nsfw Tag (مش شغال)===\n" + nsfwData);
-		} else {
-			if (sfw.hasOwnProperty(args[0])) apiUrl = sfw[args[0]];
-			else if (nsfw.hasOwnProperty(args[0])) apiUrl = nsfw[args[0]];
+    let genre;
+    if (messageBody.includes('shonen')) {
+      genre = 'shonen';
+    } else if (messageBody.includes('seinen')) {
+      genre = 'seinen';
+    } else if (messageBody.includes('isekai')) {
+      genre = 'isekai';
+    } else {
+      await message.reply('Please specify genre.\n{p}anime {genre}:- shonen | seinen | isekai');
+      return;
+    }
 
-			try {
-				const { data: apiData } = await axios.get(apiUrl);
-				const url = apiData.data.response.url;
-				const ext = url.split(".").slice(-1)[0];
-				const path = resolve(__dirname, 'cache', `${args[0]}_${senderID}.${ext}`);
+    try {
+      const loadingMessage = await message.reply('𝗟𝗢𝗔𝗗𝗜𝗡𝗚 𝗥𝗔𝗡𝗗𝗢𝗠 𝗔𝗡𝗜𝗠𝗘 𝗥𝗘𝗖𝗢𝗠𝗠𝗘𝗡𝗗𝗔𝗧𝗜𝗢𝗡..');
 
-				await global.utils.downloadFile(url, path);
+      const apiUrl = `https://anime-reco.vercel.app/anime?genre=${genre}`;
+      const response = await axios.get(apiUrl);
 
-				return out({
-					attachment: createReadStream(path)
-				}, function () {
-					return unlinkSync(path);
-				});
-			} catch (error) {
-				console.log(error);
-				return out("Sorry, there was an error with the API.");
-			}
-		}
-	}
+      if (response.data.anime && response.data.videoLink) {
+        const animeName = response.data.anime;
+        const videoUrl = response.data.videoLink;
+
+        console.log(`${animeName}`);
+        console.log(`${videoUrl}`);
+
+        const cacheFilePath = __dirname + `/cache/anime_${Date.now()}.mp4`;
+        await this.downloadVideo(videoUrl, cacheFilePath);
+
+        if (fs.existsSync(cacheFilePath)) {
+          await message.reply({
+            body: `𝗥𝗘𝗖𝗢𝗠𝗠𝗘𝗡𝗗𝗘𝗗 𝗔𝗡𝗜𝗠𝗘 : ${animeName}`,
+            attachment: fs.createReadStream(cacheFilePath),
+          });
+
+          fs.unlinkSync(cacheFilePath);
+        } else {
+          message.reply("Error downloading the video.");
+        }
+      } else {
+        message.reply("API CHALENA MUJI(API ISSUE)");
+      }
+
+      await message.unsend(loadingMessage.messageID);
+    } catch (err) {
+      console.error(err);
+      message.reply("An error occurred while processing the anime command.");
+    }
+  },
+
+  downloadVideo: async function (url, cacheFilePath) {
+    try {
+      const response = await axios({
+        method: "GET",
+        url: url,
+        responseType: "stream"
+      });
+
+      const writer = fs.createWriteStream(cacheFilePath);
+      response.data.pipe(writer);
+
+      return new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  },
 };
