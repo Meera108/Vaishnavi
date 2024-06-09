@@ -24,7 +24,7 @@ onChat: async ({ api, event, args }) => {
 if (!fs.existsSync(pathFile))
 	 fs.writeFileSync(pathFile, 'false');
 	 const isEnable = fs.readFileSync(pathFile, 'utf-8');
-	 if (isEnable == 'true')
+	 if (isEnable == 'false')
 		 api.markAsReadAll(() => {});
 },
 
